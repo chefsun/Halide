@@ -383,6 +383,46 @@ target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,S
 add_dependencies(Halide HalideIncludes)
 
 ##
+# Add WABT (for WASM testing)
+# TODO: should this go under dependencies/ ?
+##
+
+option(WITH_WABT "Include WABT Interpreter for WASM testing" ON)
+if (WITH_WABT)
+    message(STATUS "Fetching WABT...")
+    include(FetchContent)
+
+    if (HALIDE_ENABLE_EXCEPTIONS)
+        set(WITH_EXCEPTIONS ON)
+    else()
+        set(WITH_EXCEPTIONS OFF)
+    endif()
+    FetchContent_Declare(wabt
+        GIT_REPOSITORY https://github.com/WebAssembly/wabt.git
+        # GIT_TAG 1.0.16    # TODO: just get at tip for now
+                # DO NOT CHECK IN
+                # GIT_REPOSITORY https://github.com/steven-johnson/wabt
+                # GIT_TAG srj-fetchcontent
+        GIT_SHALLOW TRUE
+        # TODO: we don't need the submodules, but specifying "" as a way to skip them
+        # is currently broken. We'll use a workaround suggested in
+        # https://gitlab.kitware.com/cmake/cmake/-/issues/20579, which is
+        # to specify a on-git-submodule dir that already exists.
+        GIT_SUBMODULES "test"
+    )
+    FetchContent_MakeAvailable(wabt)
+    target_include_directories(wabt PRIVATE ${wabt_SOURCE_DIR} ${wabt_BINARY_DIR}) # ${wabt_SOURCE_DIR})
+
+    target_link_libraries(Halide PRIVATE wabt)
+    # TODO: we want to require unique prefixes to include these files, to avoid ambiguity;
+    # this means we have to prefix with "wabt-src/...", which is less bad than other alternatives,
+    # but perhaps we could do better (esp. if wabt was smarter about what it exposed?)
+    target_include_directories(Halide PRIVATE ${CMAKE_BINARY_DIR}/_deps ${wabt_SOURCE_DIR} ${wabt_BINARY_DIR})
+
+    add_definitions(-DWITH_WABT)
+endif()
+
+##
 # Include paths for libHalide
 ##
 

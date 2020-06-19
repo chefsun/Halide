@@ -65,10 +65,10 @@ bool check_result() {
 }
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support passing arbitrary pointers to/from HalideExtern code.\n");
-        return 0;
-    }
+    // if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    //     printf("[SKIP] WebAssembly JIT does not support passing arbitrary pointers to/from HalideExtern code.\n");
+    //     return 0;
+    // }
 
     // Define a pipeline that dumps some squares to a file using an
     // external consumer stage.

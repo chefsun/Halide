@@ -31,10 +31,10 @@ extern "C" DLLEXPORT int check_struct(struct_t *s) {
 HalideExtern_1(int, check_struct, struct_t *);
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as the wasm JIT cannot support passing arbitrary pointers to/from HalideExtern code.\n");
-        return 0;
-    }
+    // if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+    //     printf("[SKIP] Skipping test for WebAssembly as the wasm JIT cannot support passing arbitrary pointers to/from HalideExtern code.\n");
+    //     return 0;
+    // }
 
     // Check make_struct is working. make_struct is not intended to be
     // called from the front-end because the structs live on the stack

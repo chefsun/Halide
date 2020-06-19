@@ -21,7 +21,7 @@
 #pragma clang system_header
 #endif
 
-#ifdef WITH_V8
+#if defined(WITH_V8) || defined(WITH_WABT)
 #include <lld/Common/Driver.h>
 #endif
 

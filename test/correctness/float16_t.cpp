@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         b.set(bfloat16_t(2.75f));
         float result = evaluate<float>(cast<float>(a) + cast<float>(b));
         if (result != 4.25f) {
-            printf("Incorrect result: %f != 4.25f\n", result);
+            printf("1Incorrect result: %f != 4.25f\n", result);
             return 1;
         }
     }
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         c.set(float16_t(0));
         float16_t result = evaluate<float16_t>(lerp(a, b, c));
         if (float(result) != 24.062500f) {
-            printf("Incorrect result: %f != 24.0625f\n", (float)result);
+            printf("2Incorrect result: %f != 24.0625f\n", (float)result);
             return 1;
         }
     }
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
         c.set(bfloat16_t(0));
         bfloat16_t result = evaluate<bfloat16_t>(lerp(a, b, c));
         if (float(result) != 24.5f) {
-            printf("Incorrect result: %f != 24.5f\n", (float)result);
+            printf("3Incorrect result: %f != 24.5f\n", (float)result);
             return 1;
         }
     }
