@@ -4,6 +4,7 @@
 
 #include "Argument.h"
 #include "AutoSchedule.h"
+#include "CodeGen_Internal.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "IRVisitor.h"
@@ -416,10 +417,15 @@ class FindExterns : public IRGraphVisitor {
                 // separate call per lane. Not sure there is anywhere to get
                 // information to make a distinction in the current design.
                 std::vector<Type> arg_types;
+                if (function_takes_user_context(op->name)) {
+                    arg_types.push_back(type_of<void *>());
+                }
                 for (Expr e : op->args) {
                     arg_types.push_back(e.type().element_of());
                 }
-                ExternCFunction f(address, ExternSignature(op->type.element_of(), op->type.bits() == 0, arg_types));
+                bool is_void_return = op->type.bits() == 0 || op->name == "halide_print";
+                ExternSignature sig(is_void_return ? Type() : op->type.element_of(), is_void_return, arg_types);
+                ExternCFunction f(address, sig);
                 JITExtern jit_extern(f);
                 debug(2) << "FindExterns adds: " << op->name << "\n";
                 externs.emplace(op->name, jit_extern);
@@ -1020,7 +1026,7 @@ Pipeline::make_externs_jit_module(const Target &target,
                 arg_types.push_back(type_of<struct halide_buffer_t *>());
             }
             ExternSignature signature(Int(32), false, arg_types);
-            iter->second = ExternCFunction(address, signature);
+            iter->second = JITExtern(ExternCFunction(address, signature));
         } else {
             free_standing_jit_externs.add_extern_for_export(iter->first, iter->second.extern_c_function());
         }

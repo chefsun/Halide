@@ -577,8 +577,11 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile_trampolines(
         const std::string &callee_name = e.first;
         const std::string wrapper_name = callee_name + suffix;
         llvm::FunctionType *fn_type = codegen->signature_to_type(e.second);
-        llvm::Function *callee = llvm::Function::Create(fn_type,
-                                                        llvm::Function::ExternalLinkage, callee_name, codegen->module.get());
+        // callee might already be present for builtins, e.g. halide_print
+        llvm::Function *callee = codegen->module->getFunction(callee_name);
+        if (!callee) {
+            callee = llvm::Function::Create(fn_type, llvm::Function::ExternalLinkage, callee_name, codegen->module.get());
+        }
         codegen->add_argv_wrapper(callee, wrapper_name, /*result_in_argv*/ true);
     }
     return codegen->finish_codegen();
