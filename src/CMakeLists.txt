@@ -397,6 +397,10 @@ if (WITH_WABT)
     else()
         set(WITH_EXCEPTIONS OFF)
     endif()
+
+    set(BUILD_TESTS OFF)
+    set(BUILD_TOOLS OFF)
+    set(BUILD_LIBWASM OFF)
     FetchContent_Declare(wabt
         GIT_REPOSITORY https://github.com/WebAssembly/wabt.git
         # GIT_TAG 1.0.16    # TODO: just get at tip for now
