@@ -130,6 +130,7 @@ string CodeGen_WebAssembly::mattrs() const {
     //    s << sep << "+nontrapping-fptoint";
     //    sep = ",";
     // }
+    // TODO: this is "sat_float_to_int" in WABT
 
     user_assert(target.os == Target::WebAssemblyRuntime)
         << "wasmrt is the only supported 'os' for WebAssembly at this time.";

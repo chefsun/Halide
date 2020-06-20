@@ -49,7 +49,7 @@ namespace {
 // ---------------------
 
 // Debugging the WebAssembly JIT support is usually disconnected from the rest of HL_DEBUG_CODEGEN
-#define WASM_DEBUG_LEVEL 1
+#define WASM_DEBUG_LEVEL 0
 
 struct debug_sink {
     debug_sink() = default;
@@ -410,197 +410,6 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> declty
 #undef HANDLE_CASE
 }
 // clang-format on
-
-}  // namespace
-
-#endif  // defined(WITH_WABT)
-
-#ifdef WITH_V8
-
-        // namespace {
-
-        // // ---------------------
-        // // V8-specific glue
-        // // ---------------------
-
-        // using namespace v8;
-
-        // #define V8_API_VERSION ((V8_MAJOR_VERSION * 10) + V8_MINOR_VERSION)
-
-        // static_assert(V8_API_VERSION >= 75,
-        //               "Halide requires V8 v7.5 or later when compiling WITH_V8.");
-
-        // v8::Local<v8::String> NewLocalString(v8::Isolate *isolate, const char *s) {
-        // #if V8_API_VERSION >= 76
-        //     return v8::String::NewFromUtf8(isolate, s).ToLocalChecked();
-        // #else
-        //     return v8::String::NewFromUtf8(isolate, s);
-        // #endif
-        // }
-
-        // #if WASM_DEBUG_LEVEL
-        // void print_object_properties(Isolate *isolate, const Local<Value> &v) {
-        //     Local<Context> context = isolate->GetCurrentContext();
-        //     String::Utf8Value objascii(isolate, v);
-        //     wdebug(1) << *objascii << "\n";
-
-        //     if (v->IsObject()) {
-        //         Local<Object> obj = v.As<Object>();
-        //         Local<Array> properties = obj->GetPropertyNames(context).ToLocalChecked();
-        //         int len = properties->Length();
-        //         wdebug(1) << "Number of properties = " << len << ":\n";
-        //         for (int i = 0; i < len; ++i) {
-        //             const v8::Local<v8::Value> key = properties->Get(i);
-        //             String::Utf8Value str(isolate, key);
-        //             wdebug(1) << "\t" << i + 1 << ". " << *str << "\n";
-        //         }
-        //     }
-        // }
-        // #endif
-
-        // enum ExternWrapperFieldSlots {
-        //     kTrampolineWrap,
-        //     kArgTypesWrap
-        // };
-
-        // // Use a POD here so we can stuff it all into an ArrayBuffer to avoid having
-        // // to worry about lifetime management
-        // struct ExternArgType {
-        //     halide_type_t type;
-        //     bool is_void;
-        //     bool is_buffer;
-        // };
-
-        // void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value> &args) {
-        //     Isolate *isolate = args.GetIsolate();
-        //     HandleScope scope(isolate);
-        //     Local<Context> context = isolate->GetCurrentContext();
-        //     Local<Object> wrapper_data = args.Data()->ToObject(context).ToLocalChecked();
-
-        //     Local<External> trampoline_wrap = Local<External>::Cast(wrapper_data->GetInternalField(kTrampolineWrap));
-        //     Local<ArrayBuffer> arg_types_wrap = Local<ArrayBuffer>::Cast(wrapper_data->GetInternalField(kArgTypesWrap));
-
-        //     using TrampolineFn = void (*)(void **);
-        //     TrampolineFn trampoline = (TrampolineFn)trampoline_wrap->Value();
-
-        //     size_t arg_types_len = (arg_types_wrap->ByteLength() / sizeof(ExternArgType)) - 1;
-        //     const ExternArgType *arg_types = (const ExternArgType *)arg_types_wrap->GetContents().Data();
-        //     const ExternArgType ret_type = *arg_types++;
-
-        //     // There's wasted space here, but that's ok.
-        //     std::vector<Halide::Runtime::Buffer<>> buffers(arg_types_len);
-        //     std::vector<uint64_t> scalars(arg_types_len);
-        //     std::vector<void *> trampoline_args(arg_types_len);
-
-        //     for (size_t i = 0; i < arg_types_len; ++i) {
-        //         if (arg_types[i].is_buffer) {
-        //             const wasm32_ptr_t buf_ptr = args[i]->Int32Value(context).ToChecked();
-        //             wasmbuf_to_hostbuf(context, buf_ptr, buffers[i]);
-        //             trampoline_args[i] = buffers[i].raw_buffer();
-        //         } else {
-        //             dynamic_type_dispatch<ExtractAndStoreScalar>(arg_types[i].type, context, args[i], &scalars[i]);
-        //             trampoline_args[i] = &scalars[i];
-        //         }
-        //     }
-
-        //     // The return value (if any) is always scalar.
-        //     uint64_t ret_val = 0;
-        //     const bool has_retval = !ret_type.is_void;
-        //     internal_assert(!ret_type.is_buffer);
-        //     if (has_retval) {
-        //         trampoline_args.push_back(&ret_val);
-        //     }
-        //     (*trampoline)(trampoline_args.data());
-
-        //     if (has_retval) {
-        //         dynamic_type_dispatch<LoadAndReturnScalar>(ret_type.type, context, (void *)&ret_val, args.GetReturnValue());
-        //     }
-
-        //     // Progagate buffer data backwards. Note that for arbitrary extern functions,
-        //     // we have no idea which buffers might be "input only", so we copy all data for all of them.
-        //     for (size_t i = 0; i < arg_types_len; ++i) {
-        //         if (arg_types[i].is_buffer) {
-        //             const wasm32_ptr_t buf_ptr = args[i]->Int32Value(context).ToChecked();
-        //             copy_hostbuf_to_existing_wasmbuf(context, buffers[i], buf_ptr);
-        //         }
-        //     }
-        // }
-
-        // bool should_skip_extern_symbol(const std::string &name) {
-        //     static std::set<std::string> symbols = {
-        //         "halide_print",
-        //         "halide_error"};
-        //     return symbols.count(name) > 0;
-        // }
-
-        // void add_extern_callbacks(const Local<Context> &context,
-        //                           const JITExternMap &jit_externs,
-        //                           const JITModule &trampolines,
-        //                           Local<Object> &imports_dict) {
-        //     Isolate *isolate = context->GetIsolate();
-        //     Local<ObjectTemplate> extern_callback_template = ObjectTemplate::New(isolate);
-        //     extern_callback_template->SetInternalFieldCount(4);
-        //     for (const auto &it : jit_externs) {
-        //         const auto &name = it.first;
-        //         if (should_skip_extern_symbol(name)) {
-        //             continue;
-        //         }
-
-        //         const auto &jit_extern = it.second;
-
-        //         const auto &trampoline_symbol = trampolines.exports().find(name + kTrampolineSuffix);
-        //         internal_assert(trampoline_symbol != trampolines.exports().end());
-
-        //         const auto &sig = jit_extern.extern_c_function().signature();
-        //         size_t arg_count = sig.arg_types().size();
-        //         Local<ArrayBuffer> arg_types_wrap = ArrayBuffer::New(isolate, sizeof(ExternArgType) * (arg_count + 1));
-        //         ExternArgType *arg_types = (ExternArgType *)arg_types_wrap->GetContents().Data();
-        //         if (sig.is_void_return()) {
-        //             // Type specified here will be ignored
-        //             *arg_types++ = ExternArgType{{halide_type_int, 0, 0}, true, false};
-        //         } else {
-        //             const Type &t = sig.ret_type();
-        //             const bool is_buffer = (t == type_of<halide_buffer_t *>());
-        //             user_assert(t.lanes() == 1) << "Halide Extern functions cannot return vector values.";
-        //             user_assert(!is_buffer) << "Halide Extern functions cannot return halide_buffer_t.";
-        //             // TODO: the assertion below can be removed once we are able to marshal int64 values across the barrier
-        //             user_assert(!(t.is_handle() && !is_buffer)) << "Halide Extern functions cannot return arbitrary pointers as arguments.";
-        //             // TODO: the assertion below can be removed once we are able to marshal int64 values across the barrier
-        //             user_assert(!(t.is_int_or_uint() && t.bits() == 64)) << "Halide Extern functions cannot accept 64-bit values as arguments.";
-        //             *arg_types++ = ExternArgType{t, false, false};
-        //         }
-        //         for (size_t i = 0; i < arg_count; ++i) {
-        //             const Type &t = sig.arg_types()[i];
-        //             const bool is_buffer = (t == type_of<halide_buffer_t *>());
-        //             user_assert(t.lanes() == 1) << "Halide Extern functions cannot accept vector values as arguments.";
-        //             // TODO: the assertion below can be removed once we are able to marshal int64 values across the barrier
-        //             user_assert(!(t.is_handle() && !is_buffer)) << "Halide Extern functions cannot accept arbitrary pointers as arguments.";
-        //             // TODO: the assertion below can be removed once we are able to marshal int64 values across the barrier
-        //             user_assert(!(t.is_int_or_uint() && t.bits() == 64)) << "Halide Extern functions cannot accept 64-bit values as arguments.";
-        //             *arg_types++ = ExternArgType{t, false, is_buffer};
-        //         }
-
-        //         Local<Object> wrapper_data = extern_callback_template->NewInstance(context).ToLocalChecked();
-        //         Local<External> trampoline_wrap(External::New(isolate, const_cast<void *>(trampoline_symbol->second.address)));
-        //         wrapper_data->SetInternalField(kTrampolineWrap, trampoline_wrap);
-        //         wrapper_data->SetInternalField(kArgTypesWrap, arg_types_wrap);
-
-        //         Local<v8::String> key = NewLocalString(isolate, name.c_str());
-        //         Local<v8::Function> value = FunctionTemplate::New(isolate, v8_extern_wrapper, wrapper_data)
-        //                                         ->GetFunction(context)
-        //                                         .ToLocalChecked();
-
-        //         (void)imports_dict->Set(context, key, value).ToChecked();
-        //     }
-        // }
-
-        // }  // namespace
-
-#endif  // WITH_V8
-
-#ifdef WITH_WABT
-
-namespace {
 
 std::string to_string(const wabt::MemoryStream &m) {
     // TODO: ugh
@@ -1480,6 +1289,17 @@ wabt::interp::HostFunc::Ptr make_extern_callback(wabt::interp::Store &store,
     return host_func;
 }
 
+wabt::Features calc_features(const Target &target) {
+    wabt::Features f;
+    if (target.has_feature(Target::WasmSignExt)) {
+        f.enable_sign_extension();
+    }
+    if (target.has_feature(Target::WasmSimd128)) {
+        f.enable_simd();
+    }
+    return f;
+}
+
 }  // namespace
 
 #endif  // WITH_WABT
@@ -1500,9 +1320,6 @@ struct WasmModuleContents {
     wabt::interp::Instance::Ptr instance;
     wabt::interp::Thread::Options thread_options;
     wabt::interp::Memory::Ptr memory;
-        // s_thread_options.value_stack_size
-        // s_thread_options.call_stack_size
-    wabt::Features features;
 #endif
 
     WasmModuleContents(
@@ -1535,12 +1352,14 @@ WasmModuleContents::WasmModuleContents(
     // Compile halide into wasm bytecode.
     std::vector<char> final_wasm = compile_to_wasm(halide_module, fn_name);
 
+    store = wabt::interp::Store(calc_features(halide_module.target()));
+
     // Create a wabt Module for it.
     wabt::MemoryStream log_stream;
     constexpr bool kReadDebugNames = true;
     constexpr bool kStopOnFirstError = true;
     constexpr bool kFailOnCustomSectionError = true;
-    wabt::ReadBinaryOptions options(features,
+    wabt::ReadBinaryOptions options(store.features(),
                                     &log_stream,
                                     kReadDebugNames,
                                     kStopOnFirstError,
@@ -1618,201 +1437,6 @@ WasmModuleContents::WasmModuleContents(
     bdmalloc.init(memory->ByteSize(), heap_base);
 
 #endif  // WITH_WABT
-
-#ifdef WITH_V8
-//     static std::once_flag init_v8_once;
-//     std::call_once(init_v8_once, []() {
-//         // Initialize V8.
-//         V8::InitializeICU();
-//         static std::unique_ptr<Platform> platform = platform::NewDefaultPlatform();
-//         V8::InitializePlatform(platform.get());
-//         V8::Initialize();
-//         std::vector<std::string> flags = {
-//             // TODO: these need to match the flags we set in CodeGen_WebAssembly::mattrs().
-//             // Note that we currently enable all features that *might* be used
-//             // (eg we enable simd even though we might not use it) as we may well end
-//             // using different Halide Targets across our lifespan.
-//             "--experimental-wasm-sat-f2i-conversions",  // +nontrapping-fptoint
-//             "--experimental_wasm_se",                   // +sign-ext
-//             "--experimental_wasm_simd",                 // +simd128
-//             // "--experimental_wasm_bulk_memory",
-
-//             // Sometimes useful for debugging purposes:
-//             // "--print_all_exceptions=true",
-//             // "--abort_on_uncaught_exception",
-//             // "--trace-ignition-codegen",
-//             // "--trace_wasm_decoder",
-//             // "--no-liftoff",
-//             // "--wasm-interpret-all",
-//             // "--trace-wasm-memory",
-//         };
-//         for (const auto &f : flags) {
-//             V8::SetFlagsFromString(f.c_str(), f.size());
-//         }
-//     });
-
-//     array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
-
-//     Isolate::CreateParams isolate_params;
-//     isolate_params.snapshot_blob = nullptr;
-//     isolate_params.array_buffer_allocator = array_buffer_allocator;
-//     // Create a new Isolate and make it the current one.
-//     isolate = Isolate::New(isolate_params);
-
-//     Locker locker(isolate);
-//     Isolate::Scope isolate_scope(isolate);
-
-//     // Create a stack-allocated handle scope.
-//     HandleScope handle_scope(isolate);
-
-//     Local<ObjectTemplate> global = ObjectTemplate::New(isolate);
-//     Local<Context> context = Context::New(isolate, NULL, global);
-//     v8_context.Reset(isolate, context);
-
-//     Context::Scope context_scope(context);
-
-//     TryCatch try_catch(isolate);
-//     try_catch.SetCaptureMessage(true);
-//     try_catch.SetVerbose(true);
-
-//     Local<v8::String> fn_name_str = NewLocalString(isolate, fn_name.c_str());
-
-//     std::vector<char> final_wasm = compile_to_wasm(module, fn_name);
-
-//     MaybeLocal<WasmModuleObject> maybe_compiled = WasmModuleObject::DeserializeOrCompile(isolate,
-//                                                                                          /* serialized_module */ {nullptr, 0},
-//                                                                                          /* wire_bytes */ {(const uint8_t *)final_wasm.data(), final_wasm.size()});
-
-//     Local<WasmModuleObject> compiled;
-//     if (!maybe_compiled.ToLocal(&compiled)) {
-//         // Versions of V8 prior to 7.5 or so don't propagate the exception properly,
-//         // so don't attempt to print the exception info if it's not present.
-//         if (try_catch.HasCaught()) {
-//             String::Utf8Value error(isolate, try_catch.Exception());
-//             internal_error << "Error compiling wasm: " << *error << "\n";
-//         } else {
-//             internal_error << "Error compiling wasm: <unknown>\n";
-//         }
-//     }
-
-//     Local<Object> imports_dict = Object::New(isolate);
-
-//     const auto add_callback = [&](const char *name, FunctionCallback f) {
-//         // Skip any leading :: nonsense that we needed to add
-//         // to disambiguate (say) ::sin() from Halide::sin()
-//         while (*name == ':')
-//             name++;
-//         Local<v8::String> key = NewLocalString(isolate, name);
-//         Local<v8::Function> value = FunctionTemplate::New(isolate, f)->GetFunction(context).ToLocalChecked();
-//         (void)imports_dict->Set(context, key, value).ToChecked();
-//     };
-
-// #define ADD_CALLBACK(x) add_callback(#x, wasm_jit_##x##_callback);
-
-//     // Halide Runtime glue
-//     ADD_CALLBACK(halide_error);
-//     ADD_CALLBACK(halide_print);
-//     ADD_CALLBACK(halide_trace_helper);
-
-//     // libc-ish glue
-//     ADD_CALLBACK(__cxa_atexit)
-//     ADD_CALLBACK(abort)
-//     ADD_CALLBACK(fclose)
-//     ADD_CALLBACK(fileno)
-//     ADD_CALLBACK(fopen)
-//     ADD_CALLBACK(free)
-//     ADD_CALLBACK(fwrite)
-//     ADD_CALLBACK(getenv)
-//     ADD_CALLBACK(malloc)
-//     ADD_CALLBACK(memcmp)
-//     ADD_CALLBACK(memcpy)
-//     ADD_CALLBACK(memset)
-//     ADD_CALLBACK(strlen)
-//     ADD_CALLBACK(write)
-//     ADD_CALLBACK(__extendhfsf2)
-//     ADD_CALLBACK(__truncsfhf2)
-
-// #undef ADD_CALLBACK
-
-// #define ADD_POSIX_MATH(t, f) add_callback(#f, wasm_jit_posix_math_callback<t, f>);
-// #define ADD_POSIX_MATH2(t, f) add_callback(#f, wasm_jit_posix_math2_callback<t, f>);
-
-//     // math glue
-//     ADD_POSIX_MATH(double, ::acos)
-//     ADD_POSIX_MATH(double, ::acosh)
-//     ADD_POSIX_MATH(double, ::asin)
-//     ADD_POSIX_MATH(double, ::asinh)
-//     ADD_POSIX_MATH(double, ::atan)
-//     ADD_POSIX_MATH(double, ::atanh)
-//     ADD_POSIX_MATH(double, ::cos)
-//     ADD_POSIX_MATH(double, ::cosh)
-//     ADD_POSIX_MATH(double, ::exp)
-//     ADD_POSIX_MATH(double, ::log)
-//     ADD_POSIX_MATH(double, ::round)
-//     ADD_POSIX_MATH(double, ::sin)
-//     ADD_POSIX_MATH(double, ::sinh)
-//     ADD_POSIX_MATH(double, ::tan)
-//     ADD_POSIX_MATH(double, ::tanh)
-
-//     ADD_POSIX_MATH(float, ::acosf)
-//     ADD_POSIX_MATH(float, ::acoshf)
-//     ADD_POSIX_MATH(float, ::asinf)
-//     ADD_POSIX_MATH(float, ::asinhf)
-//     ADD_POSIX_MATH(float, ::atanf)
-//     ADD_POSIX_MATH(float, ::atanhf)
-//     ADD_POSIX_MATH(float, ::cosf)
-//     ADD_POSIX_MATH(float, ::coshf)
-//     ADD_POSIX_MATH(float, ::expf)
-//     ADD_POSIX_MATH(float, ::logf)
-//     ADD_POSIX_MATH(float, ::roundf)
-//     ADD_POSIX_MATH(float, ::sinf)
-//     ADD_POSIX_MATH(float, ::sinhf)
-//     ADD_POSIX_MATH(float, ::tanf)
-//     ADD_POSIX_MATH(float, ::tanhf)
-
-//     ADD_POSIX_MATH2(float, ::atan2f)
-//     ADD_POSIX_MATH2(double, ::atan2)
-//     ADD_POSIX_MATH2(float, ::powf)
-//     ADD_POSIX_MATH2(double, ::pow)
-
-// #undef ADD_POSIX_MATH
-// #undef ADD_POSIX_MATH2
-
-//     add_extern_callbacks(context, jit_externs, trampolines, imports_dict);
-
-//     Local<Object> imports = Object::New(isolate);
-//     (void)imports->Set(context, NewLocalString(isolate, "env"), imports_dict).ToChecked();
-
-//     Local<Value> instance_args[2] = {compiled, imports};
-
-//     Local<Object> exports = context->Global()
-//                                 ->Get(context, NewLocalString(isolate, "WebAssembly"))
-//                                 .ToLocalChecked()
-//                                 .As<Object>()
-//                                 ->Get(context, NewLocalString(isolate, "Instance"))
-//                                 .ToLocalChecked()
-//                                 .As<Object>()
-//                                 ->CallAsConstructor(context, 2, instance_args)
-//                                 .ToLocalChecked()
-//                                 .As<Object>()
-//                                 ->Get(context, NewLocalString(isolate, "exports"))
-//                                 .ToLocalChecked()
-//                                 .As<Object>();
-
-//     Local<Value> function_value = exports->Get(context, fn_name_str).ToLocalChecked();
-//     Local<v8::Function> function = Local<v8::Function>::Cast(function_value);
-//     internal_assert(!function.IsEmpty());
-//     internal_assert(!function->IsNullOrUndefined());
-//     v8_function.Reset(isolate, function);
-
-//     context->SetEmbedderData(kWasmMemoryObject, exports->Get(context, NewLocalString(isolate, "memory")).ToLocalChecked().As<Object>());
-//     context->SetAlignedPointerInEmbedderData(kBDMallocPtr, &bdmalloc);
-//     context->SetEmbedderData(kHeapBase, exports->Get(context, NewLocalString(isolate, "__heap_base")).ToLocalChecked().As<Object>());
-//     context->SetEmbedderData(kString_buffer, NewLocalString(isolate, "buffer"));
-//     context->SetEmbedderData(kString_grow, NewLocalString(isolate, "grow"));
-
-//     internal_assert(!try_catch.HasCaught());
-#endif  // WITH_V8
 }
 
 int WasmModuleContents::run(const void **args) {
@@ -1909,105 +1533,14 @@ int WasmModuleContents::run(const void **args) {
 
 
 #endif
-#ifdef WITH_V8
-    // Locker locker(isolate);
-    // Isolate::Scope isolate_scope(isolate);
-
-    // // Create a stack-allocated handle scope.
-    // HandleScope handle_scope(isolate);
-
-    // Local<Context> context = Local<Context>::New(isolate, v8_context);
-    // // Enter the context for compiling and running the hello world script.
-    // Context::Scope context_scope(context);
-
-    // TryCatch try_catch(isolate);
-    // try_catch.SetCaptureMessage(true);
-    // try_catch.SetVerbose(true);
-
-    // std::vector<wasm32_ptr_t> wbufs(arguments.size(), 0);
-
-    // std::vector<v8::Local<Value>> js_args;
-    // for (size_t i = 0; i < arguments.size(); i++) {
-    //     const Argument &arg = arguments[i];
-    //     const void *arg_ptr = args[i];
-    //     if (arg.is_buffer()) {
-    //         halide_buffer_t *buf = (halide_buffer_t *)const_cast<void *>(arg_ptr);
-    //         internal_assert(buf);
-    //         wasm32_ptr_t wbuf = hostbuf_to_wasmbuf(context, buf);
-    //         wbufs[i] = wbuf;
-    //         js_args.push_back(wrap_scalar(context, wbuf));
-    //     } else {
-    //         if (arg.name == "__user_context") {
-    //             js_args.push_back(wrap_scalar(context, kMagicJitUserContextValue));
-    //             JITUserContext *jit_user_context = check_jit_user_context(*(JITUserContext **)const_cast<void *>(arg_ptr));
-    //             context->SetAlignedPointerInEmbedderData(kJitUserContext, jit_user_context);
-    //         } else {
-    //             js_args.push_back(wrap_scalar(context, arg.type, arg_ptr));
-    //         }
-    //     }
-    // }
-
-    // Local<v8::Function> function = Local<v8::Function>::New(isolate, v8_function);
-    // MaybeLocal<Value> result = function->Call(context, context->Global(), js_args.size(), js_args.data());
-
-    // if (result.IsEmpty()) {
-    //     String::Utf8Value error(isolate, try_catch.Exception());
-    //     String::Utf8Value message(isolate, try_catch.Message()->GetSourceLine(context).ToLocalChecked());
-
-    //     internal_error << "Error running wasm: " << *error << " | Line: " << *message << "\n";
-    // }
-
-    // int r = result.ToLocalChecked()->Int32Value(context).ToChecked();
-    // if (r == 0) {
-    //     // Update any output buffers
-    //     for (size_t i = 0; i < arguments.size(); i++) {
-    //         const Argument &arg = arguments[i];
-    //         const void *arg_ptr = args[i];
-    //         if (arg.is_buffer()) {
-    //             halide_buffer_t *buf = (halide_buffer_t *)const_cast<void *>(arg_ptr);
-    //             copy_wasmbuf_to_existing_hostbuf(context, wbufs[i], buf);
-    //         }
-    //     }
-    // }
-
-    // for (wasm32_ptr_t p : wbufs) {
-    //     v8_WasmMemoryObject_free(context, p);
-    // }
-
-    // // Don't do this: things allocated by Halide runtime might need to persist
-    // // between multiple invocations of the same function.
-    // // bdmalloc.reset();
-
-    // return r;
-#endif  // WITH_V8
 
     internal_error << "WasmExecutor is not configured correctly";
     return -1;
 }
 
 WasmModuleContents::~WasmModuleContents() {
-#ifdef WITH_V8
-    // if (isolate != nullptr) {
-    //     // TODO: Do we have to do this explicitly, or does disposing the Isolate handle it?
-    //     {
-    //         v8::Locker locker(isolate);
-    //         v8::Isolate::Scope isolate_scope(isolate);
-
-    //         v8_context.Reset();
-    //         v8_function.Reset();
-    //     }
-
-    //     isolate->Dispose();
-    // }
-    // delete array_buffer_allocator;
-#endif
-
 #ifdef WITH_WABT
-    // wasm_extern_vec_delete(&exports);
-    // wasm_module_delete(module);
-    // wasm_instance_delete(instance);
-    // wasm_store_delete(store);
-    // wasm_engine_delete(engine);
+    // nothing
 #endif
 }
 
@@ -2023,7 +1556,7 @@ void destroy<WasmModuleContents>(const WasmModuleContents *p) {
 
 /*static*/
 bool WasmModule::can_jit_target(const Target &target) {
-#if defined(WITH_V8) || defined(WITH_WABT)
+#if defined(WITH_WABT)
     if (target.arch == Target::WebAssembly) {
         return true;
     }
@@ -2038,7 +1571,7 @@ WasmModule WasmModule::compile(
     const std::string &fn_name,
     const std::map<std::string, Halide::JITExtern> &jit_externs,
     const std::vector<JITModule> &extern_deps) {
-#if !defined(WITH_V8) && !defined(WITH_WABT)
+#if !defined(WITH_WABT)
     user_error << "Cannot run JITted JavaScript without configuring a JavaScript engine.";
     return WasmModule();
 #endif

@@ -92,5 +92,12 @@ function(tests)
         endif ()
     endforeach ()
 
+
+    set(META_TARGET test_${PRIMARY_GROUP})
+    if (NOT TARGET ${META_TARGET})
+        add_custom_target(${META_TARGET})
+    endif ()
+    add_dependencies(${META_TARGET} ${TEST_NAMES})
+
     set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
 endfunction(tests)
